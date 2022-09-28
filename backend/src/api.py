@@ -1,9 +1,10 @@
+import http.client
 import os
 from flask import Flask, request, jsonify, abort
 from sqlalchemy import exc
 import json
 from flask_cors import CORS
-
+import sys
 from .database.models import db_drop_and_create_all, setup_db, Drink
 from .auth.auth import AuthError, requires_auth
 
@@ -12,7 +13,8 @@ setup_db(app)
 CORS(app)
 
 '''
-@TODO uncomment the following line to initialize the datbase
+✅ DONE
+@ uncomment the following line to initialize the datbase
 !! NOTE THIS WILL DROP ALL RECORDS AND START YOUR DB FROM SCRATCH
 !! NOTE THIS MUST BE UNCOMMENTED ON FIRST RUN
 !! Running this funciton will add one
@@ -21,7 +23,8 @@ CORS(app)
 
 # ROUTES
 '''
-@TODO implement endpoint
+✅ DONE
+@ implement endpoint
     GET /drinks
         it should be a public endpoint
         it should contain only the drink.short() data representation
@@ -30,8 +33,22 @@ CORS(app)
 '''
 
 
+@app.route('/drinks', methods=['GET'])
+def get_drinks():
+    try:
+        drinks = [d.short() for d in Drink.query.all()]
+        return jsonify({
+            'success': True,
+            'drinks': drinks,
+        })
+    except Exception as e:
+        print('🔴', e)
+        abort(404)
+
+
 '''
-@TODO implement endpoint
+✅ DONE
+@ implement endpoint
     GET /drinks-detail
         it should require the 'get:drinks-detail' permission
         it should contain the drink.long() data representation
@@ -40,8 +57,23 @@ CORS(app)
 '''
 
 
+@app.route('/drinks-details', methods=['GET'])
+@requires_auth(permission='get:drinks-detail')
+def get_drinks_details():
+    try:
+        drinks_long = [d.long() for d in Drink.query.all()]
+        return {
+            'success': True,
+            'drinks': drinks_long
+        }
+    except AuthError as e:
+        print('🔴', e)
+        abort(500)
+
+
 '''
-@TODO implement endpoint
+✅ DONE
+@ implement endpoint
     POST /drinks
         it should create a new row in the drinks table
         it should require the 'post:drinks' permission
@@ -51,8 +83,33 @@ CORS(app)
 '''
 
 
+@app.route('/drinks', methods=['POST'])
+@requires_auth(permission='post:drinks')
+def create_drink():
+    id = request.get_json().get('id', None)
+    title = request.get_json().get('title', None)
+    recipe = request.get_json().get('recipe', None)
+    try:
+        if (id is None) or (title is None) or (recipe is None):
+            abort(422)
+        for item in recipe:
+            if not ('color' in item.keys()) or not ('parts' in item.keys()) or not ('name' in item.keys()):
+                abort(422)
+        new_drink = Drink(title=title, recipe=json.dumps(recipe))
+        new_drink.insert()
+
+        return {
+            'success': True,
+            'new_drink': new_drink.long()
+        }
+    except AuthError as e:
+        print('🔴', e)
+        abort(500)
+
+
 '''
-@TODO implement endpoint
+✅ DONE
+@ implement endpoint
     PATCH /drinks/<id>
         where <id> is the existing model id
         it should respond with a 404 error if <id> is not found
@@ -64,8 +121,33 @@ CORS(app)
 '''
 
 
+@app.route('/drinks/<id>', methods=['PATCH'])
+@requires_auth(permission='patch:drinks')
+def updateDrink(id):
+    body = request.get_json()
+    try:
+        drink = Drink.query.filter_by(id=id).first()
+        if drink is None:
+            abort(404)
+        if 'title' in body.keys():
+            drink.title = body['title']
+
+        if 'recipe' in body.keys():
+            drink.recipe = json.dumps(body['recipe'])
+        drink.update()
+
+        return jsonify({
+            'success': True,
+            'new_drink': drink.long()
+        })
+    except Exception as e:
+        print('🔴', e)
+        abort(500)
+
+
 '''
-@TODO implement endpoint
+✅ DONE
+@ implement endpoint
     DELETE /drinks/<id>
         where <id> is the existing model id
         it should respond with a 404 error if <id> is not found
@@ -76,13 +158,35 @@ CORS(app)
 '''
 
 
+@app.route('/drinks/<id>', methods=['DELETE'])
+@requires_auth(permission='delete:drinks')
+def deleteDrink(id):
+    try:
+        drink = Drink.query.filter_by(id=id).first()
+        if drink is None:
+            abort(404)
+        drink.delete()
+        return jsonify({
+            'success': True,
+            "delete": id
+        })
+    except Exception as e:
+        print('🔴', e)
+        abort(500)
+
+
+@ app.route('/')
+def get():
+    return 'good'
+
+
 # Error Handling
 '''
 Example error handling for unprocessable entity
 '''
 
 
-@app.errorhandler(422)
+@ app.errorhandler(422)
 def unprocessable(error):
     return jsonify({
         "success": False,
@@ -92,7 +196,7 @@ def unprocessable(error):
 
 
 '''
-@TODO implement error handlers using the @app.errorhandler(error) decorator
+@ implement error handlers using the @app.errorhandler(error) decorator
     each error handler should return (with approprate messages):
              jsonify({
                     "success": False,
@@ -103,12 +207,32 @@ def unprocessable(error):
 '''
 
 '''
-@TODO implement error handler for 404
+✅ DONE
+@ implement error handler for 404
     error handler should conform to general task above
 '''
 
 
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        "success": False,
+        "error": 404,
+        "message": "Not found"
+    }), 404
+
+
 '''
-@TODO implement error handler for AuthError
+✅ DONE 
+@ implement error handler for AuthError
     error handler should conform to general task above
 '''
+
+
+@app.errorhandler(401)
+def not_found(error):
+    return jsonify({
+        "success": False,
+        "error": 401,
+        "message": "UnAuthorized,Request lacks valid authentication credentials for the requested resource"
+    }), 401
